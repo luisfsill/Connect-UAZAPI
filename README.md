@@ -1,6 +1,6 @@
-# 📱 Evolution WhatsApp Reconnect
+# 📱 UAZAPI WhatsApp Reconnect
 
-Página HTML standalone para reconexão de instâncias WhatsApp via Evolution API. Interface responsiva com QR Code auto-refresh e configuração via URL parameters.
+Página HTML standalone para reconexão de instâncias WhatsApp via UAZAPI. Interface responsiva com QR Code auto-refresh e configuração via URL parameters.
 
 ## ✨ Características
 
@@ -16,9 +16,17 @@ Página HTML standalone para reconexão de instâncias WhatsApp via Evolution AP
 
 ### 1. Para Desenvolvedores/Suporte
 
-1. Abra o arquivo `reconexao-evolution.html` no navegador
+1. Abra o arquivo `index.html` no navegador
 2. Preencha os campos:
-   - **URL Base da API**: `https://sua-api.com`
+   - **Instance Token**: Seu token UAZAPI
+   - **Telefone**: Número do WhatsApp com código país (ex: 5511999999999) - apenas números, sem espaços ou símbolos
+
+**Nota:** O sistema valida o formato do telefone antes de prosseguir.
+3. Clique em **"🧪 Testar Conexão"** para validar (opcional)
+4. Clique em **"🔗 Gerar Link para Cliente"**
+5. Copie o link gerado e envie para o cliente
+
+**Nota:** A URL da API está fixa no código como `https://lfsystem.uazapi.com`
    - **API Key**: Sua chave de API Evolution
    - **Nome da Instância**: Nome da instância WhatsApp
 3. Clique em **"🧪 Testar Conexão"** para validar (opcional)
@@ -76,10 +84,19 @@ A configuração é codificada em Base64 para ofuscar as credenciais na URL.
 
 ## 🛠️ Compatibilidade
 
-- ✅ Evolution API v2.x
+- ✅ UAZAPI v2.x
 - ✅ Todos navegadores modernos
 - ✅ Mobile e desktop
 - ✅ Sem dependências externas
+
+## 📚 Documentação UAZAPI
+
+- URL Base: https://lfsystem.uazapi.com (fixa no código)
+- Documentação: https://docs.uazapi.com
+- Endpoints utilizados:
+  - `POST /instance/connect` - Gerar QR Code
+  - `GET /instance/status` - Verificar status
+- Autenticação: Header `token` com seu token UAZAPI
 
 ## 📄 Licença
 
@@ -87,4 +104,4 @@ MIT License - Use livremente em seus projetos!
 
 ---
 
-**Criado com ❤️ para facilitar reconexões WhatsApp via Evolution API**
+**Criado com ❤️ para facilitar reconexões WhatsApp via UAZAPI**
