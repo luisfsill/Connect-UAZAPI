@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📱</text></svg>">
-  <title>Conexão UAZAPI</title>
+  <title>Conexão ZAP</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -203,7 +203,7 @@
     
     let timerInterval;
     let checagemInterval;
-    let timeLeft = 30;
+    let timeLeft = 300; // 5 minutos
     let config = {};
 
     // Verifica se há configuração na URL ao carregar
@@ -354,7 +354,7 @@
       // Reset timers
       clearInterval(timerInterval);
       clearInterval(checagemInterval);
-      timeLeft = 30; // Volta para 30 segundos como no original
+      timeLeft = 300; // 5 minutos para o Pair Code expirar naturalmente
       updateTimer();
       timerInterval = setInterval(updateTimer, 1000);
       
@@ -391,19 +391,8 @@
         // Log de debug para ver a estrutura real da resposta
         console.log('Resposta completa da UAZAPI:', JSON.stringify(data, null, 2));
         
-        // Verifica se a instância já está conectada
-        if (data.status?.connected || data.instance?.status === 'connected') {
-          qrcodeElement.innerHTML = '<div class="status success">✅ WhatsApp já está conectado!<br/>Não é necessário escanear QR Code.</div>';
-          
-          // Para os timers já que não precisa mais atualizar
-          clearInterval(timerInterval);
-          clearInterval(checagemInterval);
-          
-          const timerElement = document.getElementById('timer');
-          timerElement.innerHTML = '<div class="status success">🎉 Instância já conectada!</div>';
-          
-          return;
-        }
+        // NÃO verificar aqui se já conectou - apenas prosseguir com QR/Pair Code
+        // A verificação real é feita periodicamente via GET /instance/status
         
         // Tenta obter QR code da resposta - UAZAPI retorna em instance.qrcode
         let qrBase64 = data.instance?.qrcode || data.qrCode || data.base64 || data.data?.qrCode || data.image || data.qr || data.code;
@@ -429,7 +418,7 @@
             
             // Continua atualizando mesmo com o Pair Code
             clearInterval(timerInterval);
-            timeLeft = 30;
+            timeLeft = 300; // 5 minutos
             timerInterval = setInterval(updateTimer, 1000);
             updateTimer();
             return;
@@ -455,14 +444,16 @@
 
     function updateTimer() {
       const timerElement = document.getElementById('timer');
-      timerElement.textContent = `🔄 Novo código em: ${timeLeft}s`;
-      timerElement.style.color = timeLeft <= 5 ? 'red' : '';
+      const minutos = Math.floor(timeLeft / 60);
+      const segundos = timeLeft % 60;
+      timerElement.textContent = `🔄 Novo código em: ${minutos}:${segundos.toString().padStart(2, '0')}`;
+      timerElement.style.color = timeLeft <= 30 ? 'red' : '';
       
       if (timeLeft === 0) {
         clearInterval(timerInterval);
         
         generateQRCode();
-        timeLeft = 30;
+        timeLeft = 300;
         timerInterval = setInterval(updateTimer, 1000);
       } else {
         timeLeft--;
