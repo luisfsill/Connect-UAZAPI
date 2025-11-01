@@ -388,8 +388,11 @@
         
         const data = await response.json();
         
+        // Log de debug para ver a estrutura real da resposta
+        console.log('Resposta completa da UAZAPI:', JSON.stringify(data, null, 2));
+        
         // Verifica se a instância já está conectada
-        if (data.status === 'connected' || (data.instance && data.instance.status === 'connected')) {
+        if (data.status?.connected || data.instance?.status === 'connected') {
           qrcodeElement.innerHTML = '<div class="status success">✅ WhatsApp já está conectado!<br/>Não é necessário escanear QR Code.</div>';
           
           // Para os timers já que não precisa mais atualizar
@@ -402,17 +405,44 @@
           return;
         }
         
-        // Tenta obter QR code da resposta
-        let qrBase64 = data.qrCode || data.base64 || data.data?.qrCode;
+        // Tenta obter QR code da resposta - UAZAPI retorna em instance.qrcode
+        let qrBase64 = data.instance?.qrcode || data.qrCode || data.base64 || data.data?.qrCode || data.image || data.qr || data.code;
         
-        if (qrBase64) {
-          // Remove o prefixo data:image se presente
-          const base64Clean = qrBase64.includes(',') ? qrBase64.split(',')[1] : qrBase64;
-          const imgSrc = `data:image/png;base64,${base64Clean}`;
-          qrcodeElement.innerHTML = `<img src="${imgSrc}" alt="QR Code" style="max-width: 100%; height: auto;">`;
-        } else {
-          throw new Error('QR Code não encontrado na resposta');
+        // Se não houver QR Code, tenta usar o Pair Code
+        if (!qrBase64 || qrBase64.trim() === '') {
+          const pairCode = data.instance?.paircode || data.paircode;
+          
+          if (pairCode && pairCode.trim() !== '') {
+            // Mostra o Pair Code em vez do QR Code
+            qrcodeElement.innerHTML = `
+              <div style="text-align: center; padding: 30px; background: #f0f0f0; border-radius: 8px;">
+                <p style="font-size: 14px; color: #666; margin-bottom: 10px;">🔗 Código de Pareamento</p>
+                <div style="font-size: 32px; font-weight: bold; color: #667eea; font-family: monospace; letter-spacing: 3px; margin: 20px 0;">
+                  ${pairCode}
+                </div>
+                <p style="font-size: 12px; color: #999; margin-top: 20px;">
+                  Use este código no WhatsApp para conectar<br>
+                  <strong>Válido por 5 minutos</strong>
+                </p>
+              </div>
+            `;
+            
+            // Continua atualizando mesmo com o Pair Code
+            clearInterval(timerInterval);
+            timeLeft = 30;
+            timerInterval = setInterval(updateTimer, 1000);
+            updateTimer();
+            return;
+          }
+          
+          // Se nem QR nem Pair Code, mostra erro
+          throw new Error('QR Code e Pair Code não disponíveis. Verifique o status da instância ou tente novamente.');
         }
+        
+        // Se houver QR Code, mostra normalmente
+        const base64Clean = qrBase64.includes(',') ? qrBase64.split(',')[1] : qrBase64;
+        const imgSrc = `data:image/png;base64,${base64Clean}`;
+        qrcodeElement.innerHTML = `<img src="${imgSrc}" alt="QR Code" style="max-width: 100%; height: auto;">`;
         
       } catch (error) {
         console.error('Erro ao gerar QR code:', error);
@@ -423,20 +453,16 @@
       }
     }
 
-    async function updateQRCode() {
-      await fetchAndDisplayQRCode();
-    }
-
     function updateTimer() {
       const timerElement = document.getElementById('timer');
-      timerElement.textContent = `🔄 Novo QR Code em: ${timeLeft}s`;
+      timerElement.textContent = `🔄 Novo código em: ${timeLeft}s`;
       timerElement.style.color = timeLeft <= 5 ? 'red' : '';
       
       if (timeLeft === 0) {
         clearInterval(timerInterval);
         
-        updateQRCode();
-        timeLeft = 30; // Volta para 30 segundos como no original
+        generateQRCode();
+        timeLeft = 30;
         timerInterval = setInterval(updateTimer, 1000);
       } else {
         timeLeft--;
@@ -457,9 +483,9 @@
           if (!response.ok) throw new Error('Erro ao verificar conexão');
           
           const data = await response.json();
-          const state = data.instance?.status || data.status;
+          const isConnected = data.status?.connected || data.instance?.status === 'connected';
           
-          if (state === 'connected') {
+          if (isConnected) {
             // Remove o QR Code e mostra mensagem de sucesso
             const qrcodeElement = document.getElementById('qrcode');
             qrcodeElement.innerHTML = '<div class="status success">✅ WhatsApp já está conectado!<br/>Não é necessário escanear QR Code.</div>';
