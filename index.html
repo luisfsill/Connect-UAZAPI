@@ -164,6 +164,11 @@
       <p>Preencha os dados abaixo e gere um link personalizado para o cliente</p>
       
       <div class="form-group">
+        <label for="apiUrl">URL da API:</label>
+        <input type="text" id="apiUrl" placeholder="https://lfsystem.uazapi.com" value="">
+      </div>
+      
+      <div class="form-group">
         <label for="apiKey">Instance Token:</label>
         <input type="password" id="apiKey" placeholder="Token da instância UAZAPI">
       </div>
@@ -175,6 +180,7 @@
       
       <button class="btn" onclick="generateClientUrl()">🔗 Gerar Link para Cliente</button>
       <button class="btn btn-secondary" onclick="testConnection()">🧪 Testar Conexão</button>
+      <button class="btn btn-secondary" onclick="clearAllFields()">🗑️ Limpar Campos</button>
       
       <div id="shareUrl" style="display: none;">
         <h3>Link para o Cliente:</h3>
@@ -198,16 +204,40 @@
   </div>
 
   <script>
-    // URL fixa da API UAZAPI
-    const API_BASE_URL = 'https://lfsystem.uazapi.com';
-    
     let timerInterval;
     let checagemInterval;
     let timeLeft = 300; // 5 minutos
     let config = {};
+    let API_BASE_URL = 'https://lfsystem.uazapi.com';
 
     // Verifica se há configuração na URL ao carregar
     window.onload = function() {
+      // Carrega valores salvos do localStorage
+      const savedApiUrl = localStorage.getItem('apiUrl');
+      const savedApiKey = localStorage.getItem('apiKey');
+      const savedPhone = localStorage.getItem('phone');
+      
+      if (savedApiUrl) {
+        document.getElementById('apiUrl').value = savedApiUrl;
+      }
+      if (savedApiKey) {
+        document.getElementById('apiKey').value = savedApiKey;
+      }
+      if (savedPhone) {
+        document.getElementById('instanceName').value = savedPhone;
+      }
+      
+      // Adiciona event listeners para salvar no localStorage
+      document.getElementById('apiUrl').addEventListener('change', function() {
+        localStorage.setItem('apiUrl', this.value);
+      });
+      document.getElementById('apiKey').addEventListener('change', function() {
+        localStorage.setItem('apiKey', this.value);
+      });
+      document.getElementById('instanceName').addEventListener('change', function() {
+        localStorage.setItem('phone', this.value);
+      });
+      
       const urlParams = new URLSearchParams(window.location.search);
       const configData = urlParams.get('config');
       
@@ -223,18 +253,29 @@
       }
     };
 
-    function normalizeApiUrl(url) {
-      if (!url) return url;
+    function clearAllFields() {
+      // Limpa os inputs
+      document.getElementById('apiUrl').value = '';
+      document.getElementById('apiKey').value = '';
+      document.getElementById('instanceName').value = '';
       
-      // Remove barras no final
-      return url.replace(/\/+$/, '');
+      // Limpa o localStorage
+      localStorage.removeItem('apiUrl');
+      localStorage.removeItem('apiKey');
+      localStorage.removeItem('phone');
+      
+      // Esconde o link gerado
+      document.getElementById('shareUrl').style.display = 'none';
+      
+      showSuccess('✅ Todos os campos foram limpos!');
     }
 
     function generateClientUrl() {
+      const apiUrl = document.getElementById('apiUrl').value;
       const apiKey = document.getElementById('apiKey').value;
       const phone = document.getElementById('instanceName').value;
       
-      if (!apiKey || !phone) {
+      if (!apiUrl || !apiKey || !phone) {
         showError('Por favor, preencha todos os campos');
         return;
       }
@@ -245,26 +286,29 @@
         return;
       }
       
-      // Cria configuração codificada
-      const configObj = {
-        apiBaseUrl: API_BASE_URL,
+      // Atualiza config global
+      config = {
+        apiBaseUrl: apiUrl.replace(/\/+$/, ''), // Remove barras no final
         apiKey: apiKey,
         phone: phone
       };
       
-      const encodedConfig = btoa(JSON.stringify(configObj));
+      const encodedConfig = btoa(JSON.stringify(config));
       const currentUrl = window.location.href.split('?')[0];
       const clientUrl = `${currentUrl}?config=${encodedConfig}`;
       
       document.getElementById('generatedUrl').textContent = clientUrl;
       document.getElementById('shareUrl').style.display = 'block';
+      
+      showSuccess('✅ Link gerado com sucesso!');
     }
 
     async function testConnection() {
+      const apiUrl = document.getElementById('apiUrl').value;
       const apiKey = document.getElementById('apiKey').value;
       const phone = document.getElementById('instanceName').value;
       
-      if (!apiKey || !phone) {
+      if (!apiUrl || !apiKey || !phone) {
         showError('Por favor, preencha todos os campos');
         return;
       }
@@ -275,8 +319,10 @@
         return;
       }
       
+      const baseUrl = apiUrl.replace(/\/+$/, ''); // Remove barras no final
+      
       try {
-        const response = await fetch(`${API_BASE_URL}/instance/status`, {
+        const response = await fetch(`${baseUrl}/instance/status`, {
           method: 'GET',
           headers: {
             'token': apiKey,
@@ -370,20 +416,56 @@
       qrcodeElement.innerHTML = '';
       
       try {
-        const response = await fetch(`${API_BASE_URL}/instance/connect`, {
+        // Primeiro verifica o status atual
+        const statusResponse = await fetch(`${config.apiBaseUrl}/instance/status`, {
+          method: 'GET',
+          headers: {
+            'token': config.apiKey,
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json();
+          const currentStatus = statusData.instance?.status || statusData.status;
+          
+          // Se já estiver conectado, não precisa gerar QR Code
+          if (currentStatus === 'connected') {
+            qrcodeElement.innerHTML = '<div class="status success">✅ WhatsApp já está conectado!<br/>Não é necessário escanear QR Code.</div>';
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.innerHTML = '<div class="status success">✅ WhatsApp conectado com sucesso!</div>';
+            const timerElement = document.getElementById('timer');
+            timerElement.innerHTML = '<div class="status success">🎉 Conexão estabelecida!</div>';
+            loader.style.display = 'none';
+            clearInterval(timerInterval);
+            clearInterval(checagemInterval);
+            return;
+          }
+          
+          // Se já estiver connecting e tiver QR Code, usa o que já existe
+          if (currentStatus === 'connecting' && statusData.instance?.qrcode) {
+            const qrBase64 = statusData.instance.qrcode;
+            const base64Clean = qrBase64.includes(',') ? qrBase64.split(',')[1] : qrBase64;
+            const imgSrc = `data:image/png;base64,${base64Clean}`;
+            qrcodeElement.innerHTML = `<img src="${imgSrc}" alt="QR Code" style="max-width: 100%; height: auto;">`;
+            loader.style.display = 'none';
+            return;
+          }
+        }
+        
+        // Se não estiver conectado nem com QR Code ativo, gera novo QR Code
+        const response = await fetch(`${config.apiBaseUrl}/instance/connect`, {
           method: 'POST',
           headers: {
             'token': config.apiKey,
             'Accept': 'application/json',
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            phone: config.phone
-          })
+          body: JSON.stringify({})  // Body vazio para gerar QR Code
         });
         
         if (!response.ok) {
-          throw new Error('Erro na resposta do servidor');
+          throw new Error(`Erro na resposta do servidor (${response.status})`);
         }
         
         const data = await response.json();
@@ -391,51 +473,37 @@
         // Log de debug para ver a estrutura real da resposta
         console.log('Resposta completa da UAZAPI:', JSON.stringify(data, null, 2));
         
-        // NÃO verificar aqui se já conectou - apenas prosseguir com QR/Pair Code
-        // A verificação real é feita periodicamente via GET /instance/status
-        
         // Tenta obter QR code da resposta - UAZAPI retorna em instance.qrcode
-        let qrBase64 = data.instance?.qrcode || data.qrCode || data.base64 || data.data?.qrCode || data.image || data.qr || data.code;
+        let qrBase64 = data.instance?.qrcode || data.qrCode || data.qrcode || data.base64 || data.data?.qrCode || data.image || data.qr || data.code;
         
-        // Se não houver QR Code, tenta usar o Pair Code
-        if (!qrBase64 || qrBase64.trim() === '') {
-          const pairCode = data.instance?.paircode || data.paircode;
-          
-          if (pairCode && pairCode.trim() !== '') {
-            // Mostra o Pair Code em vez do QR Code
-            qrcodeElement.innerHTML = `
-              <div style="text-align: center; padding: 30px; background: #f0f0f0; border-radius: 8px;">
-                <p style="font-size: 14px; color: #666; margin-bottom: 10px;">🔗 Código de Pareamento</p>
-                <div style="font-size: 32px; font-weight: bold; color: #667eea; font-family: monospace; letter-spacing: 3px; margin: 20px 0;">
-                  ${pairCode}
-                </div>
-                <p style="font-size: 12px; color: #999; margin-top: 20px;">
-                  Use este código no WhatsApp para conectar<br>
-                  <strong>Válido por 5 minutos</strong>
-                </p>
-              </div>
-            `;
-            
-            // Continua atualizando mesmo com o Pair Code
-            clearInterval(timerInterval);
-            timeLeft = 300; // 5 minutos
-            timerInterval = setInterval(updateTimer, 1000);
-            updateTimer();
-            return;
-          }
-          
-          // Se nem QR nem Pair Code, mostra erro
-          throw new Error('QR Code e Pair Code não disponíveis. Verifique o status da instância ou tente novamente.');
+        // Se tiver QR Code, mostra ele (mesmo se connected: true, pois significa que está gerando novo código)
+        if (qrBase64 && qrBase64.trim() !== '') {
+          const base64Clean = qrBase64.includes(',') ? qrBase64.split(',')[1] : qrBase64;
+          const imgSrc = `data:image/png;base64,${base64Clean}`;
+          qrcodeElement.innerHTML = `<img src="${imgSrc}" alt="QR Code" style="max-width: 100%; height: auto;">`;
+          loader.style.display = 'none';
+          return;
         }
         
-        // Se houver QR Code, mostra normalmente
-        const base64Clean = qrBase64.includes(',') ? qrBase64.split(',')[1] : qrBase64;
-        const imgSrc = `data:image/png;base64,${base64Clean}`;
-        qrcodeElement.innerHTML = `<img src="${imgSrc}" alt="QR Code" style="max-width: 100%; height: auto;">`;
+        // Se não houver QR Code mas estiver conectado
+        if (data.connected === true) {
+          qrcodeElement.innerHTML = '<div class="status success">✅ WhatsApp já está conectado!<br/>Não é necessário escanear QR Code.</div>';
+          const statusElement = document.getElementById('connectionStatus');
+          statusElement.innerHTML = '<div class="status success">✅ WhatsApp conectado com sucesso!</div>';
+          const timerElement = document.getElementById('timer');
+          timerElement.innerHTML = '<div class="status success">🎉 Conexão estabelecida!</div>';
+          loader.style.display = 'none';
+          clearInterval(timerInterval);
+          clearInterval(checagemInterval);
+          return;
+        }
+        
+        // Se não houver QR Code nem estiver conectado, mostra erro
+        throw new Error('QR Code não disponível. A instância pode estar em processo de conexão. Aguarde alguns segundos.');
         
       } catch (error) {
         console.error('Erro ao gerar QR code:', error);
-        showError('Erro ao gerar QR code. Tentando novamente...');
+        showError(error.message || 'Erro ao gerar QR code. Tentando novamente...');
         qrcodeElement.innerHTML = '<p>❌ Erro ao carregar QR Code</p>';
       } finally {
         loader.style.display = 'none';
@@ -463,7 +531,7 @@
     function iniciarChecagemConexao() {
       checagemInterval = setInterval(async () => {
         try {
-          const response = await fetch(`${API_BASE_URL}/instance/status`, {
+          const response = await fetch(`${config.apiBaseUrl}/instance/status`, {
             method: 'GET',
             headers: {
               'token': config.apiKey,
@@ -474,9 +542,17 @@
           if (!response.ok) throw new Error('Erro ao verificar conexão');
           
           const data = await response.json();
-          const isConnected = data.status?.connected || data.instance?.status === 'connected';
           
-          if (isConnected) {
+          // Verificação mais precisa: só considera conectado se status for "connected" E connected for true
+          const statusField = data.instance?.status || data.status;
+          const connectedField = data.connected;
+          
+          console.log('Status check:', { statusField, connectedField });
+          
+          // Só considera realmente conectado se o status for explicitamente "connected"
+          const isReallyConnected = statusField === 'connected';
+          
+          if (isReallyConnected) {
             // Remove o QR Code e mostra mensagem de sucesso
             const qrcodeElement = document.getElementById('qrcode');
             qrcodeElement.innerHTML = '<div class="status success">✅ WhatsApp já está conectado!<br/>Não é necessário escanear QR Code.</div>';
